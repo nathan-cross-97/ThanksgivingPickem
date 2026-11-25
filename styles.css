@@ -117,3 +117,8 @@ footer { font-size: 12px; color: var(--muted); line-height: 1.5; }
   .pot div { padding: 8px 9px; }
   .own { width: 44px; }
 }
+
+/* projections by position */
+.seg.six { grid-template-columns: repeat(6, 1fr); }
+.owned .slot { width: 18px; }
+.owned li.done .pl > span { color: var(--muted); }

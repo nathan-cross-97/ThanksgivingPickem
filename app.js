@@ -20,6 +20,7 @@
   const state = {
     sort: "points",
     expanded: new Set(),
+    pos: "QB",
     projections: null, projectionsAt: 0,
     scoring: null,
     payouts: null,
@@ -313,24 +314,20 @@
     const idx = buildIndex(state.projections || []);
     const statById = new Map((stats || []).map((r) => [r.player_id, r.stats || {}]));
 
+    const makePlayer = (key, info) => {
+      const g = teamGame.get(info.team);
+      const remaining = g ? g.remaining : 1;
+      const actual = info.id ? score(statById.get(info.id)) : 0;
+      const projFull = score(info.proj);
+      return { key, ...info, game: g, remaining, actual, projFull, live: actual + projFull * remaining, owners: 0 };
+    };
     const players = new Map();
     const lineups = entries.map((e) => {
       const lineup = e.picks.map((pk) => {
         const info = resolvePick(pk.label, pk.slot, grid, idx, teams);
         if (!info) return { ...pk, player: null };
         const key = info.id || "?" + pk.label;
-        if (!players.has(key)) {
-          const g = teamGame.get(info.team);
-          const remaining = g ? g.remaining : 1;
-          const actual = info.id ? score(statById.get(info.id)) : 0;
-          const projFull = score(info.proj);
-          players.set(key, {
-            key, ...info, game: g, remaining, actual, projFull,
-            live: actual + projFull * remaining,
-            pos: info.pos === "DEF" ? "DEF" : info.pos,
-            owners: 0,
-          });
-        }
+        if (!players.has(key)) players.set(key, makePlayer(key, info));
         const p = players.get(key);
         p.owners++;
         return { ...pk, player: p };
@@ -352,7 +349,15 @@
     });
 
     if (!state.data && games.length && games.every((g) => g.state === "pre")) state.sort = "projected";
-    state.data = { entries: lineups, active, games, players, tbGame, errors, updated: new Date(), paidCount };
+    // Everyone on the sheet's "Players to Choose From" list, picked or not.
+    const pool = new Map(players);
+    for (const label of Object.keys(grid)) {
+      const info = resolvePick(label, "", grid, idx, teams);
+      if (!info || info.unmatched) continue;
+      const key = info.id || "?" + label;
+      if (!pool.has(key)) pool.set(key, makePlayer(key, info));
+    }
+    state.data = { entries: lineups, active, games, players, pool, tbGame, errors, updated: new Date(), paidCount };
     render();
     const anyLive = games.some((g) => g.state === "in");
     $("#status").textContent = (anyLive ? "Live · " : "") + "Updated " + state.data.updated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -435,6 +440,18 @@
       <span class="score"><b>${fmt(p.actual)}</b><small>proj ${fmt(p.live)}</small></span></li>`).join("");
   }
 
+  function renderPositions() {
+    const n = state.data.active.length || 1;
+    const started = state.data.games.some((g) => g.state !== "pre");
+    const list = [...state.data.pool.values()].filter((p) => p.pos === state.pos && !p.unmatched)
+      .sort((a, b) => b.live - a.live || b.actual - a.actual || a.name.localeCompare(b.name));
+    $("#bypos").innerHTML = list.map((p, i) => `<li class="${p.remaining === 0 ? "done" : ""}"><span class="slot">${i + 1}</span>${logo(p.team)}
+      <span class="pl"><span>${esc(p.name)}</span><small>${gameChip(p.game)} · ${p.owners ? `${p.owners} of ${n} picked` : "not picked"}</small></span>
+      <span class="own"><span style="width:${(p.owners / n) * 100}%"></span></span>
+      <span class="score"><b>${fmt(p.live)}</b><small>${started ? `${fmt(p.actual)} so far` : "projected"}</small></span></li>`).join("") || `<li class="muted">No players found.</li>`;
+    document.querySelectorAll("[data-pos]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.pos === state.pos));
+  }
+
   function renderPot() {
     const { paidCount, entries } = state.data;
     const pay = state.payouts || [];
@@ -456,7 +473,7 @@
 
   function render() {
     renderErrors(state.data.errors);
-    renderGames(); renderBoard(); renderOwnership(); renderPot(); renderLock();
+    renderGames(); renderBoard(); renderPositions(); renderOwnership(); renderPot(); renderLock();
     document.querySelectorAll("[data-sort]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sort === state.sort));
   }
 
@@ -468,6 +485,7 @@
     const b = ev.target.closest("button.row"); if (!b) return;
     const n = b.dataset.name; state.expanded.has(n) ? state.expanded.delete(n) : state.expanded.add(n); renderBoard();
   });
+  document.querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => { state.pos = b.dataset.pos; if (state.data) renderPositions(); }));
   $("#refresh").addEventListener("click", () => refresh());
   $("#expandAll").addEventListener("click", () => {
     const all = state.data.active.map((e) => e.name);
