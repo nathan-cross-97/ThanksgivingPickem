@@ -9,9 +9,15 @@ There's no server and no API keys. The page fetches everything in the visitor's 
 | Live player stats | Sleeper `api.sleeper.app/stats/nfl/{season}/{week}` |
 | Scoring rules | The Sleeper league "The Snake" (half PPR; INT −2; league D/ST tiers) |
 | Projections | Sleeper `api.sleeper.app/projections/nfl/{season}/{week}` |
+| History for the charts | `history.json` on the `data` branch, written by the snapshot workflow |
 | Game clock and scores | ESPN scoreboard, with Sleeper's scores feed as a backup |
 
 The page refreshes every 60 seconds.
+
+## Charts over time
+The page only knows the current moment, so a scheduled GitHub Action (`.github/workflows/snapshot.yml`) saves a snapshot of everyone's points, projection and win odds every few minutes during the games.
+It runs `scripts/snapshot.js` and commits `history.json` to a `data` branch, which the page reads for the "The race" chart.
+The workflow must be on the default branch (`main`) to run on its schedule. Update its cron dates each year.
 
 ## What's on the page
 - **Games:** live score and clock for each game. The Broncos–Steelers game is marked as the tiebreaker game.
