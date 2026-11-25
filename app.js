@@ -138,9 +138,22 @@
   }
 
   async function loadGames() {
-    const d = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${C.espnDates}`);
+    // ESPN rejects multi-day ranges for this endpoint, so ask for each day.
+    const [from, to] = C.espnDates.split("-");
+    const days = [];
+    const day = new Date(Date.UTC(+from.slice(0, 4), +from.slice(4, 6) - 1, +from.slice(6, 8)));
+    for (let i = 0; i < 7; i++) {
+      const s = day.toISOString().slice(0, 10).replace(/-/g, "");
+      days.push(s);
+      if (s >= (to || from)) break;
+      day.setUTCDate(day.getUTCDate() + 1);
+    }
+    const boards = await Promise.all(days.map((s) => getJSON(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${s}`)));
+    const seen = new Set();
+    const events = boards.flatMap((b) => b.events || []).filter((e) => !seen.has(e.id) && seen.add(e.id));
+    if (!events.length) throw new Error("No ESPN games");
     const games = [];
-    for (const ev of d.events || []) {
+    for (const ev of events) {
       const comp = ev.competitions[0];
       const st = ev.status || comp.status;
       const teams = comp.competitors.map((t) => ({
@@ -342,14 +355,18 @@
     state.data = { entries: lineups, active, games, players, tbGame, errors, updated: new Date(), paidCount };
     render();
     const anyLive = games.some((g) => g.state === "in");
-    $("#status").textContent = (anyLive ? "● Live · " : "") + "Updated " + state.data.updated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    $("#status").textContent = (anyLive ? "Live · " : "") + "Updated " + state.data.updated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     $("#status").classList.toggle("live", anyLive);
   }
 
   // ---- rendering ----
+  const logoSlug = (abbr) => { const a = String(abbr).toLowerCase(); return a === "was" ? "wsh" : a; };
+  const logo = (abbr) => (abbr ? `<img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/${esc(logoSlug(abbr))}.png" alt="" loading="lazy">` : `<span class="logo"></span>`);
+  const kickoff = (d) => d.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+
   function gameChip(g) {
     if (!g) return `<span class="chip">–</span>`;
-    if (g.state === "pre") return `<span class="chip pre">${esc(g.date.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}</span>`;
+    if (g.state === "pre") return `<span class="chip pre">${esc(kickoff(g.date))}</span>`;
     if (g.state === "post") return `<span class="chip post">Final</span>`;
     return `<span class="chip in">${esc(g.detail)}</span>`;
   }
@@ -358,9 +375,9 @@
     const { games, tbGame } = state.data;
     $("#games").innerHTML = games.map((g) => {
       const lead = g.state !== "pre" ? (g.away.score > g.home.score ? "away" : g.home.score > g.away.score ? "home" : "") : "";
-      const tb = g === tbGame ? `<div class="tbnote">Tiebreaker game${g.overUnder ? ` · O/U ${g.overUnder}` : ""}</div>` : "";
-      const row = (t, side) => `<div class="team ${lead === side ? "lead" : ""}"><span>${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy">` : ""}${esc(t.abbr)}</span><b>${g.state === "pre" ? "" : t.score}</b></div>`;
-      return `<div class="game ${g.state}">${row(g.away, "away")}${row(g.home, "home")}<div class="gstatus">${gameChip(g)}</div>${tb}</div>`;
+      const row = (t, side) => `<div class="team ${lead === side ? "lead" : ""}">${logo(t.abbr)}<span>${esc(t.abbr)}</span><b>${g.state === "pre" ? "" : t.score}</b></div>`;
+      const status = g.state === "pre" ? esc(kickoff(g.date)) : g.state === "post" ? "Final" : `<i class="dot"></i>${esc(g.detail)}`;
+      return `<div class="game ${g.state}"><div class="gstatus">${status}</div>${row(g.away, "away")}${row(g.home, "home")}${g === tbGame ? `<div class="tbnote">Tiebreaker${g.overUnder ? ` · O/U ${g.overUnder}` : ""}</div>` : ""}</div>`;
     }).join("") || `<div class="muted">No games found.</div>`;
   }
 
@@ -373,49 +390,57 @@
   function renderBoard() {
     const rows = sorted();
     const maxPts = Math.max(1, ...rows.map((e) => Math.max(e.projected, e.points)));
+    const started = state.data.games.some((g) => g.state !== "pre");
     let rank = 0, prev = null;
-    $("#board tbody").innerHTML = rows.map((e, i) => {
+    $("#board").innerHTML = rows.map((e, i) => {
       const v = state.sort === "points" ? e.points : state.sort === "projected" ? e.projected : e.pFirst;
       if (v !== prev) rank = i + 1; prev = v;
       const open = state.expanded.has(e.name);
       const invalid = e.valid && e.valid !== "VALID";
-      return `<tr class="entry ${open ? "open" : ""} ${rank === 1 ? "first" : ""}" data-name="${esc(e.name)}" tabindex="0" aria-expanded="${open}">
-        <td class="rank">${rank}</td>
-        <td class="name"><span class="caret">▸</span>${esc(e.name)}${e.paid ? "" : ' <span class="tag">unpaid</span>'}${invalid ? ' <span class="tag bad">invalid</span>' : ""}</td>
-        <td class="num pts">${fmt(e.points)}
-          <div class="bar"><span class="actual" style="width:${(e.points / maxPts) * 100}%"></span><span class="proj" style="width:${(Math.max(0, e.projected - e.points) / maxPts) * 100}%"></span></div></td>
-        <td class="num">${fmt(e.projected)}</td>
-        <td class="num win">${pct(e.pFirst)}</td>
-        <td class="num hide-sm">${pct(e.pTop3)}</td>
-        <td class="num hide-sm">${e.ev ? money(e.ev) : "–"}</td>
-        <td class="num hide-sm">${e.left}/8</td>
-        <td class="num hide-sm">${e.tiebreaker ?? "–"}</td>
-      </tr>${open ? `<tr class="detail"><td colspan="9">${lineupHTML(e)}</td></tr>` : ""}`;
+      const big = started ? fmt(e.points) : fmt(e.projected);
+      const small = started ? `proj ${fmt(e.projected)}` : "projected";
+      return `<li class="entry ${open ? "open" : ""} r${Math.min(rank, 4)}">
+        <button type="button" class="row" data-name="${esc(e.name)}" aria-expanded="${open}">
+          <span class="rank">${rank}</span>
+          <span class="who">
+            <span class="nm">${esc(e.name)}${invalid ? ' <span class="tag bad">invalid</span>' : ""}${e.paid ? "" : ' <span class="tag">unpaid</span>'}</span>
+            <span class="meta"><b>${pct(e.pFirst)}</b> to win · top 3 ${pct(e.pTop3)}${started ? ` · ${e.left} left` : ""}${e.tiebreaker != null ? ` · TB ${e.tiebreaker}` : ""}</span>
+          </span>
+          <span class="score"><b>${big}</b><small>${small}</small></span>
+          <span class="bar"><span class="actual" style="width:${(e.points / maxPts) * 100}%"></span><span class="proj" style="width:${(Math.max(0, e.projected - e.points) / maxPts) * 100}%"></span></span>
+        </button>${open ? lineupHTML(e) : ""}</li>`;
     }).join("");
     const waiting = state.data.entries.filter((e) => !e.hasPicks);
-    $("#waiting").innerHTML = waiting.length ? `<b>Waiting on picks (${waiting.length}):</b> ${waiting.map((e) => esc(e.name)).join(", ")}` : "";
+    $("#waiting").innerHTML = waiting.length ? `<summary>Waiting on picks from ${waiting.length}</summary><p>${waiting.map((e) => `<span class="tag">${esc(e.name)}</span>`).join(" ")}</p>` : "";
+    $("#waiting").hidden = !waiting.length;
   }
 
   function lineupHTML(e) {
     const n = state.data.active.length;
-    return `<table class="lineup"><thead><tr><th>Slot</th><th>Player</th><th>Game</th><th class="num">Pts</th><th class="num">Proj</th><th class="num hide-sm">Picked by</th></tr></thead><tbody>${e.lineup.map((l) => {
-      const p = l.player;
-      if (!p) return `<tr><td>${esc(l.slot)}</td><td class="muted" colspan="5">No pick</td></tr>`;
-      return `<tr class="${p.remaining === 0 ? "done" : ""}"><td>${esc(l.slot)}</td><td>${esc(p.unmatched ? l.label : p.name)} <span class="muted">${esc(p.team || "")}</span>${p.unmatched ? ' <span class="tag bad" title="Not found in Sleeper data">?</span>' : ""}</td><td>${gameChip(p.game)}</td><td class="num">${fmt(p.actual)}</td><td class="num">${fmt(p.live)}</td><td class="num hide-sm">${Math.round((p.owners / n) * 100)}%</td></tr>`;
-    }).join("")}</tbody><tfoot><tr><td></td><td>Tiebreaker: ${e.tiebreaker ?? "–"}</td><td></td><td class="num">${fmt(e.points)}</td><td class="num">${fmt(e.projected)}</td><td class="hide-sm"></td></tr></tfoot></table>`;
+    return `<ul class="lineup">${e.lineup.map((l) => {
+      const p = l.player, slot = `<span class="slot">${esc(l.slot.replace("FLEX ", "FX"))}</span>`;
+      if (!p) return `<li class="empty">${slot}<span class="logo"></span><span class="pl muted">No pick yet</span></li>`;
+      return `<li class="${p.remaining === 0 ? "done" : p.game && p.game.state === "in" ? "playing" : ""}">${slot}${logo(p.team)}
+        <span class="pl"><span>${esc(p.unmatched ? l.label : p.name)}${p.unmatched ? ' <span class="tag bad" title="Not found in Sleeper data">?</span>' : ""}</span><small>${gameChip(p.game)} · ${Math.round((p.owners / n) * 100)}% picked</small></span>
+        <span class="score"><b>${fmt(p.actual)}</b><small>proj ${fmt(p.live)}</small></span></li>`;
+    }).join("")}<li class="ev"><span>Exp. winnings <b>${e.ev ? money(e.ev) : "–"}</b></span><span>Tiebreaker <b>${e.tiebreaker ?? "–"}</b></span></li></ul>`;
   }
 
   function renderOwnership() {
     const n = state.data.active.length || 1;
     const list = [...state.data.players.values()].sort((a, b) => b.owners - a.owners || b.live - a.live);
-    $("#owned tbody").innerHTML = list.map((p) => `<tr><td>${esc(p.unmatched ? p.name : p.name)} <span class="muted">${esc(p.pos === "DEF" ? "D/ST" : p.pos)} · ${esc(p.team || "")}</span></td><td class="num">${p.owners} <span class="muted">(${Math.round((p.owners / n) * 100)}%)</span></td><td class="num">${fmt(p.actual)}</td><td class="num">${fmt(p.live)}</td></tr>`).join("");
+    $("#owned").innerHTML = list.map((p) => `<li>${logo(p.team)}
+      <span class="pl"><span>${esc(p.name)}</span><small>${esc(p.pos === "DEF" ? "D/ST" : p.pos)} · ${p.owners} of ${n}</small></span>
+      <span class="own"><span style="width:${(p.owners / n) * 100}%"></span></span>
+      <span class="score"><b>${fmt(p.actual)}</b><small>proj ${fmt(p.live)}</small></span></li>`).join("");
   }
 
   function renderPot() {
     const { paidCount, entries } = state.data;
     const pay = state.payouts || [];
-    $("#pot").innerHTML = `<div><span class="muted">Entrants</span><b>${entries.length}</b></div><div><span class="muted">Paid</span><b>${paidCount}</b></div>` +
-      ["1st", "2nd", "3rd"].map((l, i) => `<div><span class="muted">${l}</span><b>${pay[i] != null ? money(pay[i]) : "–"}</b></div>`).join("");
+    const pot = pay.reduce((a, b) => a + (b || 0), 0);
+    $("#pot").innerHTML = `<div class="total"><small>Pot · ${paidCount} of ${entries.length} paid</small><b>$${Math.round(pot)}</b></div>` +
+      ["1st", "2nd", "3rd"].map((l, i) => `<div class="p${i + 1}"><small>${l}</small><b>${pay[i] != null ? "$" + Math.round(pay[i]) : "–"}</b></div>`).join("");
   }
 
   function renderErrors(errs) {
@@ -439,15 +464,15 @@
   document.title = C.title;
   $("#title").textContent = C.title;
   document.querySelectorAll("[data-sort]").forEach((b) => b.addEventListener("click", () => { state.sort = b.dataset.sort; render(); }));
-  $("#board tbody").addEventListener("click", (ev) => {
-    const tr = ev.target.closest("tr.entry"); if (!tr) return;
-    const n = tr.dataset.name; state.expanded.has(n) ? state.expanded.delete(n) : state.expanded.add(n); renderBoard();
+  $("#board").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button.row"); if (!b) return;
+    const n = b.dataset.name; state.expanded.has(n) ? state.expanded.delete(n) : state.expanded.add(n); renderBoard();
   });
-  $("#board tbody").addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.target.click(); } });
   $("#refresh").addEventListener("click", () => refresh());
   $("#expandAll").addEventListener("click", () => {
     const all = state.data.active.map((e) => e.name);
     if (state.expanded.size >= all.length) state.expanded.clear(); else all.forEach((n) => state.expanded.add(n));
+    $("#expandAll").textContent = state.expanded.size ? "Hide lineups" : "Show all lineups";
     renderBoard();
   });
 
