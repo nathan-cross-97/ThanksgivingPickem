@@ -122,3 +122,5 @@ footer { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .seg.six { grid-template-columns: repeat(6, 1fr); }
 .owned .slot { width: 18px; }
 .owned li.done .pl > span { color: var(--muted); }
+.waiting.how { margin-top: 4px; }
+.waiting.how p { display: block; line-height: 1.5; max-width: 60ch; }
