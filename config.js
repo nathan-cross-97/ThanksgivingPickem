@@ -25,6 +25,9 @@ window.PICKEM_CONFIG = {
   buyIn: 30,
   payoutSplit: [2 / 3, 0.2639, 0.0694],
 
+  // Saved history for the charts, written by .github/workflows/snapshot.yml to the "data" branch
+  historyUrl: "https://raw.githubusercontent.com/nathan-cross-97/ThanksgivingPickem/data/history.json",
+
   lockTime: "2026-11-26T12:30:00-05:00",
   refreshSeconds: 60,
   simulations: 10000,

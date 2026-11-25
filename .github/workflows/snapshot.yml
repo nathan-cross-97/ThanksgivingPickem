@@ -1,0 +1,45 @@
+name: Snapshot scores for charts
+
+# Saves a history point every few minutes over the Thanksgiving games.
+# The history lives in history.json on the "data" branch; the site reads it from there.
+on:
+  schedule:
+    - cron: "*/5 * 26-28 11 *" # every 5 minutes, Nov 26-28 (UTC). Update the dates each year.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Get the data branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git clone --quiet --depth 1 --branch data "$url" data; then
+            mkdir data
+            git -C data init --quiet -b data
+            git -C data remote add origin "$url"
+          fi
+      - name: Take snapshot
+        run: node scripts/snapshot.js data/history.json
+      - name: Save
+        run: |
+          cd data
+          if [ ! -f history.json ]; then exit 0; fi
+          git add history.json
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="pickem-bot" -c user.email="pickem-bot@users.noreply.github.com" commit --quiet -m "Snapshot"
+          git push --quiet origin data

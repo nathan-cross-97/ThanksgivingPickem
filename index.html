@@ -39,6 +39,36 @@
       </div>
       <ol id="board" class="board"></ol>
       <details id="waiting" class="waiting" hidden></details>
+      <details class="waiting how">
+        <summary>How does win % work?</summary>
+        <p>We play out the rest of the games 10,000 times. Each player lands somewhere around their projection, sometimes way over, sometimes way under. Win % is how often your lineup finishes first. Unique picks help: if everyone has the same player, his big game doesn't separate you.</p>
+      </details>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>The race</h2></div>
+      <div class="seg" role="group" aria-label="Chart shows">
+        <button type="button" data-metric="win">Win %</button>
+        <button type="button" data-metric="projected">Projected</button>
+        <button type="button" data-metric="points">Points</button>
+      </div>
+      <div class="chartcard">
+        <div id="chart" class="chart"></div>
+        <div id="chips" class="chips" aria-label="Choose up to four people to highlight"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Projections by position</h2></div>
+      <div class="seg six" role="group" aria-label="Position">
+        <button type="button" data-pos="QB">QB</button>
+        <button type="button" data-pos="RB">RB</button>
+        <button type="button" data-pos="WR">WR</button>
+        <button type="button" data-pos="TE">TE</button>
+        <button type="button" data-pos="DEF">D/ST</button>
+        <button type="button" data-pos="K">K</button>
+      </div>
+      <ul id="bypos" class="owned"></ul>
     </section>
 
     <section>
@@ -53,6 +83,7 @@
     </footer>
   </main>
   <script src="config.js"></script>
+  <script src="core.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
