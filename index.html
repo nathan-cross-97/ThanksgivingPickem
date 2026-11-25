@@ -2,65 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1321">
   <title>Thanksgiving Pick'Em</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦃</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="wrap head">
       <div>
-        <h1>🦃 <span id="title">Thanksgiving Pick'Em</span></h1>
+        <h1><span aria-hidden="true">🦃</span> <span id="title">Thanksgiving Pick'Em</span></h1>
         <div class="sub"><span id="lock"></span> · <span id="status">Loading…</span></div>
       </div>
-      <button id="refresh" type="button">Refresh</button>
+      <button id="refresh" type="button" aria-label="Refresh" title="Refresh">↻</button>
     </div>
   </header>
 
   <main class="wrap">
     <div id="errors"></div>
     <section id="games" class="games" aria-label="Games"></section>
-    <section id="pot" class="pot" aria-label="Pot"></section>
+    <section id="pot" class="pot" aria-label="Pot and payouts"></section>
 
-    <section class="card">
-      <div class="card-head">
+    <section>
+      <div class="sec-head">
         <h2>Leaderboard</h2>
-        <div class="controls">
-          <span class="muted">Sort</span>
-          <button type="button" data-sort="points">Points</button>
-          <button type="button" data-sort="projected">Projected</button>
-          <button type="button" data-sort="win">Win %</button>
-          <button type="button" id="expandAll" class="ghost">Show all lineups</button>
-        </div>
+        <button type="button" id="expandAll" class="link">Show all lineups</button>
       </div>
-      <div class="scroll">
-        <table id="board">
-          <thead><tr>
-            <th>#</th><th>Name</th><th class="num">Pts</th><th class="num">Proj</th><th class="num">Win</th>
-            <th class="num hide-sm">Top 3</th><th class="num hide-sm" title="Expected winnings">Exp $</th>
-            <th class="num hide-sm" title="Players still to play or playing">Left</th><th class="num hide-sm">TB</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="seg" role="group" aria-label="Sort by">
+        <button type="button" data-sort="points">Points</button>
+        <button type="button" data-sort="projected">Projected</button>
+        <button type="button" data-sort="win">Win %</button>
       </div>
-      <p id="waiting" class="muted small"></p>
+      <ol id="board" class="board"></ol>
+      <details id="waiting" class="waiting" hidden></details>
     </section>
 
-    <section class="card">
-      <div class="card-head"><h2>Most picked</h2></div>
-      <div class="scroll">
-        <table id="owned">
-          <thead><tr><th>Player</th><th class="num">Picked</th><th class="num">Pts</th><th class="num">Proj</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+    <section>
+      <div class="sec-head"><h2>Most picked</h2></div>
+      <ul id="owned" class="owned"></ul>
     </section>
 
-    <footer class="muted small">
-      Picks come live from the Google Sheet. Points are Sleeper live stats scored with the league's half PPR settings, and projections are Sleeper's.
-      Proj = points so far + the projection for the rest of the game. Win %, Top 3 and Exp $ come from 10,000 simulated finishes, with the Broncos–Steelers total settling ties.
-      The page refreshes every minute.
+    <footer>
+      Picks come live from the Google Sheet. Points are Sleeper live stats scored with the league's half PPR settings.
+      Projected is points so far plus Sleeper's projection for the rest of each game. Win odds come from 10,000 simulated finishes,
+      with the Broncos–Steelers total settling ties. The page refreshes every minute.
     </footer>
   </main>
   <script src="config.js"></script>
